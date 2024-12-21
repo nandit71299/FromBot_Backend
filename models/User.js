@@ -5,11 +5,7 @@ const userSchema = new mongoose.Schema(
     username: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    workspace: {
-      folders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Folder" }],
-      forms: [{ type: mongoose.Schema.Types.ObjectId, ref: "Form" }],
-    },
-
+    workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace" }, // Single workspace reference
     sharedWorkspaces: [
       {
         type: mongoose.Schema.Types.ObjectId,
