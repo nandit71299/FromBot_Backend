@@ -1,23 +1,25 @@
 import mongoose from "mongoose";
 
-// Define the schema for the User model
 const userSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: true,
+    username: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    workspace: {
+      folders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Folder" }],
+      forms: [{ type: mongoose.Schema.Types.ObjectId, ref: "Form" }],
     },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-    },
+
+    sharedWorkspaces: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Workspace",
+      },
+    ],
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-// Create and export the User model
 const User = mongoose.model("User", userSchema);
+
 export default User;
