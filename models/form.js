@@ -1,5 +1,4 @@
-const mongoose = require("mongoose");
-
+import mongoose from "mongoose";
 const formSchema = new mongoose.Schema(
   {
     createdBy: {
@@ -25,7 +24,7 @@ const formSchema = new mongoose.Schema(
         required: { type: Boolean, default: false },
       },
     ],
- 
+
     viewCount: { type: Number, default: 0 },
     startCount: { type: Number, default: 0 },
     completedCount: { type: Number, default: 0 },

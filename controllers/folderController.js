@@ -1,6 +1,54 @@
 import Folder from "../models/folder.js";
 import User from "../models/user.js";
 
+export const getAll = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const user = await User.findById(userId);
+    const workspaceId = req.params.workspaceId;
+    let isSharedWorkspace = false;
+    let data;
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
+    const findWorkspace = await User.findOne({ workspaceId: workspaceId });
+    if (!findWorkspace) {
+      const findSharedWorkspace = await User.findOne({
+        sharedWorkspaces: workspaceId,
+      });
+      if (!findSharedWorkspace) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Workspace/Folders not found" });
+      }
+      isSharedWorkspace = true;
+      const findFolders = await Folder.find({
+        workspace: workspaceId,
+      });
+      data = findFolders;
+    } else {
+      const findFolders = await Folder.find({
+        workspace: workspaceId,
+        createdBy: userId,
+      });
+      data = findFolders;
+    }
+    res.json({
+      success: true,
+      folders: data,
+      isSharedWorkspace: isSharedWorkspace,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+};
+
 export const create = async (req, res) => {
   try {
     const { folderName } = req.body;

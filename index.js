@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import folderRoutes from "./routes/folderRoutes.js";
+import formRoutes from "./routes/formRoutes.js";
 import authMiddleware from "./middlewares/AuthMiddleware.js";
 dotenv.config();
 const PORT = process.env.PORT || 3000;
@@ -20,6 +21,7 @@ app.get("/authCheck", authMiddleware, (req, res) => {
 });
 app.use("/api/auth", authRoutes);
 app.use("/api/folder", folderRoutes);
+app.use("/api/forms", formRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
