@@ -7,7 +7,7 @@ import folderRoutes from "./routes/folderRoutes.js";
 import formRoutes from "./routes/formRoutes.js";
 import workspaceRoutes from "./routes/workspaceRoutes.js";
 import authMiddleware from "./middlewares/authMiddleware.js";
-import User from "./models/user.js";
+import User from "./models/user";
 
 dotenv.config();
 const PORT = process.env.PORT || 3000;
