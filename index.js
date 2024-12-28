@@ -27,7 +27,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/folder", folderRoutes);
 app.use("/api/forms", formRoutes);
 app.use("/api/workspace", workspaceRoutes);
-app.use("/api/theme", authMiddleware, authRoutes);
+app.use("/api/theme", authRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
