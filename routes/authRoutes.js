@@ -4,7 +4,7 @@ import {
   signup,
   getUserDetails,
 } from "../controllers/userController.js";
-import authMiddleware from "../middlewares/AuthMiddleware.js";
+import authMiddleware from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 

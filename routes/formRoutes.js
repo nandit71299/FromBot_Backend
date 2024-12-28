@@ -5,7 +5,7 @@ import {
   getAll,
   createFormInFolder,
 } from "../controllers/formController.js";
-import authMiddleware from "../middlewares/AuthMiddleware.js";
+import authMiddleware from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 router.get("/:workspaceId/:folderId?", authMiddleware, getAll);

@@ -4,7 +4,7 @@ import {
   getWorkspace,
   getAllWorkspaces,
 } from "../controllers/workspaceController.js";
-import authMiddleware from "../middlewares/AuthMiddleware.js";
+import authMiddleware from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 router.put("/shareWorkspace/:email/", authMiddleware, shareWorkspace);

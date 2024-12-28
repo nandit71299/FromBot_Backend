@@ -5,7 +5,7 @@ import {
   getAll,
   getSingle,
 } from "../controllers/folderController.js";
-import authMiddleware from "../middlewares/AuthMiddleware.js";
+import authMiddleware from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
