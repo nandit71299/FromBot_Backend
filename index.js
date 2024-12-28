@@ -6,7 +6,7 @@ import authRoutes from "./routes/authRoutes.js";
 import folderRoutes from "./routes/folderRoutes.js";
 import formRoutes from "./routes/formRoutes.js";
 import workspaceRoutes from "./routes/workspaceRoutes.js";
-import authMiddleware from "./middlewares/AuthMiddleware.js";
+import authMiddleware from "./middlewares/authMiddleware.js";
 import User from "./models/user.js";
 
 dotenv.config();
