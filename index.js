@@ -7,7 +7,17 @@ import folderRoutes from "./routes/folderRoutes.js";
 import formRoutes from "./routes/formRoutes.js";
 import workspaceRoutes from "./routes/workspaceRoutes.js";
 import authMiddleware from "./middlewares/authMiddleware.js";
-import User from "./models/user";
+
+import User from "./models/user.js";
+
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+// Get the current directory of the module
+const __filename = fileURLToPath(import.meta.url); // Similar to __filename in CommonJS
+const __dirname = dirname(__filename); // Derive __dirname
+
+console.log(__dirname); // Logs the current directory path
 
 dotenv.config();
 const PORT = process.env.PORT || 3000;
