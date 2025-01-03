@@ -4,6 +4,7 @@ import {
   signup,
   getUserDetails,
   updateTheme,
+  updateProfile,
 } from "../controllers/userController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 
@@ -17,8 +18,8 @@ router.get("/authenticate", authMiddleware, (req, res) => {
     message: "User authenticated successfully",
   });
 });
-router.put("/:theme", authMiddleware, updateTheme);
+router.put("/update-profile", authMiddleware, updateProfile);
+router.put("/change-theme", authMiddleware, updateTheme);
 
 router.get("/getUserDetails", authMiddleware, getUserDetails);
-// router.post("/updateProfle", updateProfile);
 export default router;

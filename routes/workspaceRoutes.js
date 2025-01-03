@@ -3,11 +3,17 @@ import {
   shareWorkspace,
   getWorkspace,
   getAllWorkspaces,
+  shareWorkspaceViaLink,
 } from "../controllers/workspaceController.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
-router.put("/shareWorkspace/:email/", authMiddleware, shareWorkspace);
+router.post("/shareWorkspace/link", authMiddleware, shareWorkspaceViaLink);
+router.post(
+  "/shareWorkspace/:email/:accessLevel",
+  authMiddleware,
+  shareWorkspace
+);
 router.get("/getWorkspace/:workSpaceId", authMiddleware, getWorkspace);
 router.get("/getAllWorkspaces", authMiddleware, getAllWorkspaces);
 

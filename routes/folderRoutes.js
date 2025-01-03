@@ -11,7 +11,7 @@ const router = express.Router();
 
 router.get("/:workspaceId", authMiddleware, getAll);
 router.get("/getSingle/:workspaceId/:folderId", authMiddleware, getSingle);
-router.post("/create", authMiddleware, create);
-router.delete("/delete/:folderId", authMiddleware, deleteFolder);
+router.post("/create/:workspaceId", authMiddleware, create);
+router.delete("/delete/:workspaceId/:folderId", authMiddleware, deleteFolder);
 
 export default router;

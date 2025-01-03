@@ -133,25 +133,51 @@ const signup = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { username, email, password } = req.body;
+    const { username, email, oldPassword, password } = req.body;
 
-    // Update the user's profile (including email)
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { username, email, password },
-      { new: true } // Ensure we get the updated user object
-    );
-
-    // If the user doesn't exist or can't be updated, return an error
-    if (!updatedUser) {
+    // Get the current user from the database
+    const user = await User.findById(userId);
+    if (!user) {
       return res
         .status(404)
         .json({ success: false, message: "User not found" });
     }
 
+    // If the old password is provided, verify it and update the password
+    if (oldPassword && password) {
+      // Check if the old password is correct
+      const isOldPasswordCorrect = await bcrypt.compare(
+        oldPassword,
+        user.password
+      );
+      if (!isOldPasswordCorrect) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Old password is incorrect" });
+      }
+
+      // If new password is provided, hash it and update
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Update the user's password along with any other fields provided
+      user.password = hashedPassword;
+    }
+
+    // If username or email is provided, update those
+    if (username) {
+      user.username = username;
+    }
+
+    if (email) {
+      user.email = email;
+    }
+
+    // Save the updated user to the database
+    const updatedUser = await user.save();
+
     // Create a new JWT with the updated user details (new email)
     const payload = { _id: updatedUser._id, email: updatedUser.email };
-    const secretKey = process.env.JWT_SECRET_KEY; // Or wherever your secret is stored
+    const secretKey = process.env.JWT_SECRET; // Or wherever your secret is stored
     const newToken = jwt.sign(payload, secretKey, { expiresIn: "1h" }); // Token expiry time can be adjusted
 
     // Send the updated user and new token to the frontend
@@ -174,7 +200,8 @@ const getUserDetails = async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
       .populate("workspaceId") // Populate the user's primary workspace
-      .populate("sharedWorkspaces"); // Populate the shared workspaces
+      .populate("sharedWorkspaces.workspaceId") // Populate the workspaceId inside sharedWorkspaces
+      .exec(); // Ensure we execute the query and wait for the results
 
     if (!user) {
       return res
@@ -187,13 +214,15 @@ const getUserDetails = async (req, res) => {
       ? {
           _id: user.workspaceId._id,
           workspaceName: user.workspaceId.workspaceName,
+          accessLevel: "edit",
         }
       : null;
 
     // Fetch the workspaceName and _id for all the shared workspaces
     const sharedWorkspaces = user.sharedWorkspaces.map((workspace) => ({
-      _id: workspace._id,
-      workspaceName: workspace.workspaceName,
+      _id: workspace.workspaceId._id, // Reference to the workspace _id
+      workspaceName: workspace.workspaceId.workspaceName, // Fetch workspaceName from populated workspaceId
+      accessLevel: workspace.accessLevel,
     }));
 
     // Combine the user's own workspace and shared workspaces into the workspaces array
@@ -225,7 +254,7 @@ const getUserDetails = async (req, res) => {
 
 const updateTheme = async (req, res) => {
   try {
-    const { theme } = req.params;
+    const { theme } = req.query;
 
     // Check if the theme is either "dark" or "light"
     if (theme !== "dark" && theme !== "light") {

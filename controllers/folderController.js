@@ -1,14 +1,25 @@
 import Folder from "../models/folder.js";
 import User from "../models/user.js";
 import Workspace from "../models/workSpace.js";
+import mongoose from "mongoose";
 
+export const validateObjectId = (id) => {
+  return mongoose.Types.ObjectId.isValid(id);
+};
 export const getAll = async (req, res) => {
   try {
-    const userId = req.user._id; // Getting the logged-in user's ID
-    const workspaceId = req.params.workspaceId; // The workspace ID to fetch folders for
+    const userId = req.user._id; // Get the logged-in user's ID
+    const workspaceId = req.params.workspaceId; // Get the workspaceId from the URL params
 
-    // Ensure the user is found
-    const user = await User.findById(userId).populate("sharedWorkspaces"); // Make sure to populate sharedWorkspaces
+    // Validate userId and workspaceId
+    if (!validateObjectId(userId) || !validateObjectId(workspaceId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid IDs provided" });
+    }
+
+    // Ensure the user exists
+    const user = await User.findById(userId).populate("sharedWorkspaces");
 
     if (!user) {
       return res
@@ -18,34 +29,39 @@ export const getAll = async (req, res) => {
 
     let data = [];
     let isSharedWorkspace = false;
+    let accessLevel = "edit"; // Default access level for owner's workspace
 
     // Check if the workspace belongs to the user (owner of the workspace)
-    const findWorkspace = await User.findOne({
-      _id: userId,
-      workspaceId: workspaceId, // Checking if the workspace is part of the user's workspaces
+    const isWorkspaceOwner = await Workspace.findOne({
+      _id: workspaceId,
+      createdBy: userId, // Check if the workspace was created by the user
     });
 
-    if (findWorkspace) {
-      // Fetch folders for workspace if the user owns it
+    if (isWorkspaceOwner) {
+      // The user is the owner, so we fetch folders created by the user in this workspace
       const findFolders = await Folder.find({
         workspace: workspaceId,
-        createdBy: userId, // Only fetch folders created by this user (owner)
       });
 
       data = findFolders;
+      accessLevel = "edit"; // Owner gets "edit" access
     } else {
-      // Check if the workspace is shared with the user
-
-      const isWorkspaceShared = user.sharedWorkspaces.some(
-        (workspace) => workspace._id.toString() === workspaceId.toString()
+      // The workspace is not owned by the user, check if it's shared with them
+      const sharedWorkspace = user.sharedWorkspaces.find(
+        (workspace) =>
+          workspace.workspaceId.toString() === workspaceId.toString()
       );
 
-      if (isWorkspaceShared) {
+      if (sharedWorkspace) {
         isSharedWorkspace = true;
-        // If the workspace is shared, fetch all folders within the shared workspace
+        accessLevel = sharedWorkspace.accessLevel; // Set accessLevel from shared workspace
+
+        // Fetch all folders in the shared workspace
         const findFolders = await Folder.find({
           workspace: workspaceId,
         });
+
+        // Add folders to data array
         data = findFolders;
       } else {
         return res
@@ -54,14 +70,15 @@ export const getAll = async (req, res) => {
       }
     }
 
-    // Respond with folders and whether it's a shared workspace
+    // Respond with the folders and whether it's a shared workspace
     res.json({
       success: true,
       folders: data,
       isSharedWorkspace: isSharedWorkspace,
+      accessLevel, // Include the access level for the workspace
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -72,45 +89,129 @@ export const getAll = async (req, res) => {
 export const create = async (req, res) => {
   try {
     const { folderName } = req.body;
+    const { workspaceId } = req.params; // Get the workspaceId from URL params
+
+    if (!folderName && !workspaceId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: folderName and workspaceId",
+      });
+    }
+
+    // Validate folder name
     if (!folderName) {
       return res
         .status(400)
         .json({ success: false, message: "Missing folder name" });
     }
-    const userId = req.user._id;
-    const user = await User.findById(userId);
+
+    const userId = req.user._id; // Get the logged-in user's ID
+    const user = await User.findById(userId).populate("sharedWorkspaces");
 
     if (!user)
       return res
         .status(404)
         .json({ success: false, message: "User not found" });
 
+    let accessLevel = "view"; // Default access level (view-only)
+
+    // Check if the workspace belongs to the user (owner of the workspace)
+    const isWorkspaceOwner = await Workspace.findOne({
+      _id: workspaceId,
+      createdBy: userId, // Check if the workspace was created by the user
+    });
+
+    if (isWorkspaceOwner) {
+      // The user is the owner, they automatically have "edit" rights
+      accessLevel = "edit";
+    } else {
+      // The workspace is not owned by the user, check if it's shared with them
+      const sharedWorkspace = user.sharedWorkspaces.find(
+        (workspace) =>
+          workspace.workspaceId.toString() === workspaceId.toString()
+      );
+
+      if (sharedWorkspace) {
+        accessLevel = sharedWorkspace.accessLevel; // Set accessLevel from shared workspace
+      }
+    }
+
+    // If the user does not have "edit" access, return an error
+    if (accessLevel !== "edit") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You don't have permission to create folders in this workspace",
+      });
+    }
+
+    // Proceed to create the folder
     const folder = new Folder({
       folderName,
       createdBy: userId,
-      workspace: user.workspaceId,
+      workspace: workspaceId,
     });
+
     await folder.save();
-    const workspace = await Workspace.findOne({
-      createdBy: userId,
-    });
-    workspace.folders.push(folder._id);
+
+    // Always push the folder to the workspace's folders array (even for shared workspaces)
+    const workspace = await Workspace.findById(workspaceId);
+    workspace.folders.push(folder._id); // Add the folder to the workspace's folder array
     await workspace.save();
 
-    res.json({ success: true, folder, message: "Folder saved successfully" });
+    res.json({ success: true, folder, message: "Folder created successfully" });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return res
-      .status(400)
+      .status(500)
       .json({ success: false, message: "Internal Server Error" });
   }
 };
 
 export const deleteFolder = async (req, res) => {
   try {
-    const { folderId } = req.params;
+    const { workspaceId, folderId } = req.params;
+
+    if (!workspaceId && !folderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing folderId or workspaceId",
+      });
+    }
+
+    let accessLevel = "view";
 
     const userId = req.user._id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "You are not authorized to delete this folder.",
+      });
+    }
+
+    const isWorkspaceOwner = await Workspace.findOne({
+      _id: workspaceId,
+      createdBy: userId,
+    });
+    if (isWorkspaceOwner) {
+      accessLevel = "edit";
+    } else {
+      const sharedWorkspace = user.sharedWorkspaces.find(
+        (workspace) =>
+          workspace.workspaceId.toString() === workspaceId.toString()
+      );
+      if (sharedWorkspace) {
+        accessLevel = sharedWorkspace.accessLevel;
+      }
+    }
+
+    if (accessLevel !== "edit") {
+      return res.status(403).json({
+        success: false,
+        message: "You don't have permission to delete this folder.",
+      });
+    }
 
     const folder = await Folder.findById(folderId);
 
@@ -118,13 +219,6 @@ export const deleteFolder = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Folder not found" });
-    }
-
-    if (folder.createdBy.toString() !== userId.toString()) {
-      return res.status(404).json({
-        success: false,
-        message: "Unauthorized to delete this folder",
-      });
     }
 
     await folder.deleteOne();

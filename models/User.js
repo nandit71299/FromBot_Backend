@@ -13,8 +13,11 @@ const userSchema = new mongoose.Schema(
     },
     sharedWorkspaces: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Workspace",
+        workspaceId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Workspace",
+        },
+        accessLevel: { type: String, enum: ["edit", "view"], required: true },
       },
     ],
   },
