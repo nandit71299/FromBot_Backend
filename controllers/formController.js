@@ -4,9 +4,9 @@ import Form from "../models/form.js";
 import User from "../models/user.js";
 import Workspace from "../models/workSpace.js";
 import { v7 as uuidv7 } from "uuid";
-
 import mongoose from "mongoose";
 import FormEntry from "../models/formEntry.js";
+
 export const validateObjectId = (id) => {
   return mongoose.Types.ObjectId.isValid(id);
 };
@@ -437,11 +437,6 @@ export const saveFormElements = async (req, res) => {
     const updatedElementIds = [];
 
     for (let element of elements) {
-      // If the element type is 'Image', check if a link is provided
-      if (element.type === "Image" && element.link) {
-        console.log("Saving Image with link:", element.link); // Log the link to ensure it's correct
-      }
-
       // Check if the element already exists, otherwise create it
       let existingElement = await Element.findOne({ id: element.id });
 
@@ -459,8 +454,6 @@ export const saveFormElements = async (req, res) => {
           link: element.type === "Image" ? element.link : undefined, // Store the link only if the type is "Image"
         });
 
-        console.log("New Element to Save:", newElement); // Debug log
-
         // Save the new element to the database
         await newElement.save();
         updatedElementIds.push(newElement._id); // Push the new Element ID
@@ -472,7 +465,6 @@ export const saveFormElements = async (req, res) => {
         // Update link if the element is an Image and link has changed
         if (element.type === "Image" && element.link !== existingElement.link) {
           updatedFields.link = element.link;
-          console.log("Updating Image link to:", element.link); // Log the updated link
         }
 
         // Update other fields (optional)
@@ -501,10 +493,6 @@ export const saveFormElements = async (req, res) => {
           await Element.findByIdAndUpdate(existingElement._id, updatedFields, {
             new: true,
           });
-          console.log(
-            "Updated existing element with new fields:",
-            updatedFields
-          ); // Debug log
         }
 
         updatedElementIds.push(existingElement._id); // Push the existing Element ID
@@ -566,11 +554,23 @@ export const getFormElements = async (req, res) => {
   }
 };
 
-// API to generate and return a unique session ID
 export const generateSessionId = async (req, res) => {
   try {
-    const sessionId = await generateUniqueSessionId();
-    res.status(200).json({ success: true, sessionId });
+    const { formId } = req.params; // Get formId from request parameters
+    const form = await Form.findById(formId); // Find the form by its ID
+
+    if (form) {
+      const sessionId = await generateUniqueSessionId(); // Generate a new session ID
+
+      // Increment the viewCount for this form
+      form.viewCount += 1;
+      await form.save(); // Save the updated form
+      // Save the new form entry with the generated sessionId
+
+      res.status(200).json({ success: true, sessionId }); // Send the session ID back
+    } else {
+      res.status(404).json({ success: false, message: "Form not found" });
+    }
   } catch (error) {
     console.error("Error generating session ID", error);
     res
@@ -598,4 +598,236 @@ const generateUniqueSessionId = async () => {
   }
 
   return sessionId;
+};
+export const getAllFormResponses = async (req, res) => {
+  try {
+    const { formId } = req.params;
+
+    if (!formId) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing formId parameter.",
+      });
+    }
+
+    // Fetch the form details
+    const form = await Form.findById(formId)
+      .populate("elements") // Populate elements for the form
+      .exec();
+    if (!form) {
+      return res.status(404).json({
+        success: false,
+        error: "Form not found.",
+      });
+    }
+
+    // Fetch form entries
+    const formEntries = await FormEntry.find({ formId: formId })
+      .populate("responses.elementId") // Populate responses with element details
+      .exec();
+
+    // Extract element details and map them
+    const elementDetails = form.elements.map((element) => ({
+      id: element._id,
+      type: element.type,
+      label: element.label || null,
+      placeholder: element.placeholder || null,
+      options: element.options || null,
+    }));
+
+    // Aggregate responses while filtering out unwanted element types
+    const formattedResponses = formEntries.map((entry) => {
+      const filteredResponses = entry.responses
+        .filter((response) => {
+          const elementType = response.elementId
+            ? response.elementId.type
+            : null;
+          return !["Image", "Button", "Text_Bubble"].includes(elementType); // Exclude unwanted types
+        })
+        .map((response) => ({
+          elementId: response.elementId ? response.elementId._id : null,
+          label: response.elementId ? response.elementId.label : null, // Include label for easier understanding
+          response: response.response || null, // Response value
+        }));
+
+      return {
+        submittedAt: entry.createdAt, // Timestamp for when the entry was created
+        responses: filteredResponses,
+        sessionId: entry.sessionId,
+      };
+    });
+
+    // Prepare the final response object
+    const responseData = {
+      formName: form.formName,
+      views: form.viewCount || 0, // Total views for the form
+      starts: form.startCount || 0, // Total starts for the form
+      completedCount: form.completedCount || 0, // Total completed responses
+      elements: elementDetails, // Include element details
+      entries: formattedResponses, // Include filtered and formatted responses
+    };
+
+    return res.status(200).json({ success: true, data: responseData });
+  } catch (err) {
+    console.error("Error fetching form responses:", err);
+    return res.status(500).json({
+      success: false,
+      error: "Internal Server Error.",
+    });
+  }
+};
+
+export const addFormResponse = async (req, res) => {
+  const { sessionId, formId, elementId, response } = req.body;
+
+  // Input validation
+  if (!sessionId || !formId || !elementId || !response) {
+    return res.status(400).json({
+      success: false,
+      error:
+        "Missing required fields: sessionId, formId, elementId, or response.",
+    });
+  }
+
+  try {
+    let formEntry = await FormEntry.findOne({ sessionId, formId });
+
+    if (!formEntry) {
+      // No form entry exists for this session and form, so create a new one
+      formEntry = new FormEntry({
+        sessionId,
+        formId,
+        responses: [
+          {
+            sessionId, // Track sessionId inside the responses array
+            elementId,
+            response,
+          },
+        ],
+      });
+
+      // Increment the startCount only once for the first response from the session
+      const form = await Form.findById(formId);
+      if (form) {
+        form.startCount += 1; // Increment only the first response from this session
+        await form.save();
+      }
+    } else {
+      // Form entry exists, now check if there's any response from the session
+      const existingResponse = formEntry.responses.find(
+        (r) =>
+          r.sessionId === sessionId &&
+          r.elementId.toString() === elementId.toString()
+      );
+
+      if (existingResponse) {
+        // If response already exists for this session and element, update the response
+        existingResponse.response = response;
+      } else {
+        // Otherwise, add the new response
+        formEntry.responses.push({ sessionId, elementId, response });
+
+        // Only increment the startCount if it's the first response from the session
+        const form = await Form.findById(formId);
+        if (form && form.startCount === 0) {
+          form.startCount += 1; // Increment the startCount once when the first response comes in
+          await form.save();
+        }
+      }
+    }
+
+    // Save the form entry (either new or updated)
+    await formEntry.save();
+
+    // Send response back to frontend
+    res.status(200).json({
+      success: true,
+      message: "Response recorded successfully",
+      formEntry,
+    });
+  } catch (err) {
+    console.error("Error recording form response:", err);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+};
+
+export const submitForm = async (req, res) => {
+  try {
+    const { sessionId, formId } = req.params;
+
+    // Input validation
+    if (!sessionId || !formId) {
+      return res.status(400).json({
+        error: "Missing required fields: sessionId or formId.",
+      });
+    }
+
+    // 1. Get the form by formId
+    const form = await Form.findOne({ _id: formId });
+    if (!form) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Form not found" });
+    }
+
+    // 2. Find the sessionId in the FormEntry model
+    const formEntry = await FormEntry.findOne({ sessionId, formId });
+    if (!formEntry) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Session not found" });
+    }
+
+    // 3. Check if the form has already been completed for this session
+    if (formEntry.isCompleted) {
+      return res.status(400).json({
+        success: false,
+        message: "Form already submitted by this session.",
+      });
+    }
+
+    // 4. Get the form elements and filter out the ones that don't require input
+    const formElements = await Element.find({ formId }); // Find all elements for the form
+
+    // Filter out elements that don't require user input (Image, Button, Text_Bubble)
+    const requiredElements = formElements.filter(
+      (el) =>
+        el.type !== "Image" &&
+        el.type !== "Button" &&
+        el.type !== "Text_Bubble" &&
+        el.required
+    );
+
+    // 5. Check if all the required elements have responses
+    const missingResponses = requiredElements.some(
+      (el) =>
+        !formEntry.responses.some(
+          (r) => r.elementId.toString() === el._id.toString()
+        )
+    );
+
+    if (missingResponses) {
+      return res.status(400).json({
+        success: false,
+        message: "Form is incomplete. Please answer all required questions.",
+      });
+    }
+
+    // 6. Mark the session as completed
+    formEntry.isCompleted = true;
+    await formEntry.save();
+
+    // 7. Increase the completedCount for the form
+    form.completedCount += 1;
+    await form.save();
+
+    // 8. Return success response
+    res.status(200).json({
+      success: true,
+      message: "Form submitted successfully",
+    });
+  } catch (error) {
+    console.error("Error submitting form:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
 };

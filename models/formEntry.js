@@ -15,9 +15,15 @@ const formEntrySchema = new mongoose.Schema(
       {
         elementId: { type: mongoose.Schema.Types.ObjectId, ref: "Element" },
         response: { type: String },
+        sessionId: { type: String },
       },
     ],
+    isCompleted: {
+      type: Boolean,
+      default: false, // New field to track if the form is completed
+    },
   },
+
   { timestamps: true }
 );
 
